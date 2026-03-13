@@ -45,13 +45,13 @@ If `--reviewer` is not specified in $ARGUMENTS, default to `self`.
 3. Resolve `self` to `claude` (since you are Claude).
 4. For each reviewer, pipe the prompt via stdin using your Bash tool:
 
-   - **codex**: `codex exec --skip-git-repo-check - <<'XREVIEW_EOF' ... XREVIEW_EOF`
+   - **codex**: `codex exec -C "$PWD" --skip-git-repo-check - <<'XREVIEW_EOF' ... XREVIEW_EOF`
    - **claude**: `claude -p - --print <<'XREVIEW_EOF' ... XREVIEW_EOF`
 
    Use a heredoc to pass the full prompt:
 
    ```bash
-   codex exec --skip-git-repo-check - 2>/tmp/xreview-stderr.log <<'XREVIEW_EOF'
+   codex exec -C "$PWD" --skip-git-repo-check - 2>/tmp/xreview-stderr.log <<'XREVIEW_EOF'
    [full prompt here]
    XREVIEW_EOF
    ```

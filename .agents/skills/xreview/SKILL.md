@@ -75,7 +75,7 @@ Parse the user's request for:
 4. For each reviewer, pipe the prompt via stdin using your shell tool:
 
    - **claude**: `claude -p - --print <<'XREVIEW_EOF' ... XREVIEW_EOF`
-   - **codex** (fresh instance): `codex exec --skip-git-repo-check - <<'XREVIEW_EOF' ... XREVIEW_EOF`
+   - **codex** (fresh instance): `codex exec -C "$PWD" --skip-git-repo-check - <<'XREVIEW_EOF' ... XREVIEW_EOF`
 
    Use a heredoc to pass the full prompt:
 
