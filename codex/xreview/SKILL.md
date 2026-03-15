@@ -3,13 +3,13 @@ name: xreview
 description: >
   Use when asked to cross-review, get a second opinion, or send a plan, spec, or code file to
   another AI reviewer. Applies to requests like "xreview", "$xreview", "fresh review",
-  "adversarial review", or "get Claude/Codex to review this". If no file is specified, review the
+  "independent review", "cross-review", or "get Claude/Codex to review this". If no file is specified, review the
   most recent plan or spec from the current conversation.
 ---
 
 # Cross-Review with External AI Agent
 
-Send a plan or file to another AI coding agent for adversarial review, then critically analyze their feedback.
+Send a plan or file to another AI coding agent for independent review, then critically analyze their feedback.
 
 ## Usage
 
@@ -67,7 +67,7 @@ Parse the user's request for:
 
 ## Step 3: Build and send the review prompt
 
-1. Read the reviewer prompt template from `.xreview/prompts/reviewer.md`.
+1. Read the reviewer prompt template: check `.xreview/prompts/reviewer.md` first (project-local), fall back to `~/.xreview/prompts/reviewer.md` (global).
 2. Construct the full prompt in memory by combining:
    - The reviewer prompt template
    - A `## Codebase Context` section with structure, README, and package metadata from Step 2
@@ -75,7 +75,7 @@ Parse the user's request for:
 3. Resolve `self` to `codex` (since you are Codex).
 4. For each reviewer:
 
-   - **inline**: Perform the review directly in the current session. Read the reviewer prompt template, then adopt the adversarial reviewer role and produce the review yourself. This is fast and retains full conversation context, but less independent since you wrote the plan. After producing the review, continue to Step 4 as normal.
+   - **inline**: Perform the review directly in the current session. Read the reviewer prompt template, then adopt the independent reviewer role and produce the review yourself. This is fast and retains full conversation context, but less independent since you wrote the plan. After producing the review, continue to Step 4 as normal.
 
    - **claude**: Shell out via subprocess:
      ```bash
@@ -95,7 +95,7 @@ Parse the user's request for:
 
 ## Step 4: Analyze the feedback
 
-Read the digest prompt from `.xreview/prompts/digest.md`. Follow those instructions to process each reviewer's feedback.
+Read the digest prompt: check `.xreview/prompts/digest.md` first (project-local), fall back to `~/.xreview/prompts/digest.md` (global). Follow those instructions to process each reviewer's feedback.
 
 In summary: do not blindly accept feedback. For each point, accept, reject with reasoning, or partially accept. Verify factual claims by reading actual code. Watch for hallucinated concerns, scope creep, preference-vs-problem, and over-engineering.
 
@@ -108,7 +108,7 @@ Present:
 
 If the user asks to send the updated plan back for another round:
 
-1. Read `.xreview/prompts/round2.md` and use it instead of the standard `reviewer.md`.
+1. Read the round2 prompt: check `.xreview/prompts/round2.md` first (project-local), fall back to `~/.xreview/prompts/round2.md` (global). Use it instead of the standard `reviewer.md`.
 2. For **inline** reviewers: just proceed — the full history is already in the session.
 3. For **cross-model subprocess** reviewers (`codex`, `claude`): construct the prompt with the round2 template plus:
    - `## Previous Review` — the reviewer's prior output

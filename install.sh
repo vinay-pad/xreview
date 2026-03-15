@@ -8,21 +8,21 @@ echo ""
 echo "  xreview — cross-review your plans with other AI agents"
 echo ""
 
-# Always install prompts into .xreview/prompts/
-mkdir -p .xreview/prompts
-cp "$SCRIPT_DIR/prompts/reviewer.md" .xreview/prompts/reviewer.md
-cp "$SCRIPT_DIR/prompts/digest.md" .xreview/prompts/digest.md
-cp "$SCRIPT_DIR/prompts/round2.md" .xreview/prompts/round2.md
-echo "  ✓ Prompts  →  .xreview/prompts/"
+# Install prompts globally into ~/.xreview/prompts/
+mkdir -p "$HOME/.xreview/prompts"
+cp "$SCRIPT_DIR/prompts/reviewer.md" "$HOME/.xreview/prompts/reviewer.md"
+cp "$SCRIPT_DIR/prompts/digest.md" "$HOME/.xreview/prompts/digest.md"
+cp "$SCRIPT_DIR/prompts/round2.md" "$HOME/.xreview/prompts/round2.md"
+echo "  ✓ Prompts  →  ~/.xreview/prompts/"
 
 echo ""
 
-# Claude Code: slash command
+# Claude Code: global slash command
 if command -v claude &> /dev/null; then
-    mkdir -p .claude/commands
-    cp "$SCRIPT_DIR/claude-code/xreview.md" .claude/commands/xreview.md
-    echo "  ✓ Claude Code  →  /xreview"
-    echo "    Installed .claude/commands/xreview.md"
+    mkdir -p "$HOME/.claude/commands"
+    cp "$SCRIPT_DIR/claude-code/xreview.md" "$HOME/.claude/commands/xreview.md"
+    echo "  ✓ Claude Code  →  /xreview (global)"
+    echo "    Installed ~/.claude/commands/xreview.md"
     INSTALLED=$((INSTALLED + 1))
 else
     echo "  ✗ Claude Code — not found"
@@ -31,12 +31,12 @@ fi
 
 echo ""
 
-# Codex: skill
+# Codex: global skill
 if command -v codex &> /dev/null; then
-    mkdir -p .agents/skills/xreview
-    cp "$SCRIPT_DIR/codex/xreview/SKILL.md" .agents/skills/xreview/SKILL.md
-    echo "  ✓ Codex  →  /skills -> xreview or \$xreview"
-    echo "    Installed .agents/skills/xreview/SKILL.md"
+    mkdir -p "$HOME/.agents/skills/xreview"
+    cp "$SCRIPT_DIR/codex/xreview/SKILL.md" "$HOME/.agents/skills/xreview/SKILL.md"
+    echo "  ✓ Codex  →  /skills -> xreview or \$xreview (global)"
+    echo "    Installed ~/.agents/skills/xreview/SKILL.md"
     INSTALLED=$((INSTALLED + 1))
 
     CODEX_CONFIG="$HOME/.codex/config.toml"
@@ -58,13 +58,16 @@ echo "────────────────────────�
 echo ""
 
 if [ $INSTALLED -gt 0 ]; then
-    echo "  $INSTALLED integration(s) installed."
+    echo "  $INSTALLED integration(s) installed globally."
     echo ""
-    echo "  Prompts are in .xreview/prompts/ — edit them to tune review behavior."
+    echo "  /xreview now works in any project."
+    echo ""
+    echo "  Default prompts are in ~/.xreview/prompts/"
+    echo "  To customize per-project, copy them to .xreview/prompts/ in that repo."
     echo ""
     echo "  Usage:"
-    [ -f ".claude/commands/xreview.md" ] && echo "    Claude Code:  /xreview --reviewer codex"
-    [ -f ".agents/skills/xreview/SKILL.md" ] && echo "    Codex:        /skills -> xreview or \$xreview --reviewer claude"
+    [ -f "$HOME/.claude/commands/xreview.md" ] && echo "    Claude Code:  /xreview --reviewer codex"
+    [ -f "$HOME/.agents/skills/xreview/SKILL.md" ] && echo "    Codex:        /skills -> xreview or \$xreview --reviewer claude"
     echo ""
     echo "  Restart your CLI session to load the new commands."
 else

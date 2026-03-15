@@ -1,4 +1,4 @@
-Send a plan or file to another AI coding agent for adversarial review, then critically analyze their feedback.
+Send a plan or file to another AI coding agent for independent review, then critically analyze their feedback.
 
 ## Usage
 ```
@@ -15,7 +15,7 @@ Send a plan or file to another AI coding agent for adversarial review, then crit
 - `--reviewer <list>` — comma-separated: `codex`, `claude`, `self`, `inline`. Defaults to `self` if omitted.
   - `self` = fresh instance of current model via subprocess (genuine independence, no sunk cost)
   - `codex` / `claude` = cross-model review via subprocess
-  - `inline` = in-session review (fast, retains context, but less independent — use when speed matters more than adversarial rigor)
+  - `inline` = in-session review (fast, retains context, but less independent — use when speed matters more than rigor)
 - `--context <files>` — optional comma-separated additional context files
 - `--no-codebase` — skip auto-including codebase tree
 
@@ -41,7 +41,7 @@ If `--reviewer` is not specified in $ARGUMENTS, default to `self`.
 
 ## Step 3: Build and send the review prompt
 
-1. Read the reviewer prompt template from `.xreview/prompts/reviewer.md`.
+1. Read the reviewer prompt template: check `.xreview/prompts/reviewer.md` first (project-local), fall back to `~/.xreview/prompts/reviewer.md` (global).
 2. Construct the full prompt in memory by combining:
    - The reviewer prompt template
    - A `## Codebase Context` section with the project structure, README excerpt, and package metadata from Step 2
@@ -49,7 +49,7 @@ If `--reviewer` is not specified in $ARGUMENTS, default to `self`.
 3. Resolve `self` to `claude` (since you are Claude).
 4. For each reviewer:
 
-   - **inline**: Perform the review directly in the current session. Read the reviewer prompt template, then adopt the adversarial reviewer role and produce the review yourself. This is fast and retains full conversation context, but less independent since you wrote the plan. After producing the review, continue to Step 4 as normal.
+   - **inline**: Perform the review directly in the current session. Read the reviewer prompt template, then adopt the independent reviewer role and produce the review yourself. This is fast and retains full conversation context, but less independent since you wrote the plan. After producing the review, continue to Step 4 as normal.
 
    - **codex**: Shell out via subprocess:
      ```bash
@@ -69,7 +69,7 @@ If `--reviewer` is not specified in $ARGUMENTS, default to `self`.
 
 ## Step 4: Analyze the feedback
 
-Read the digest prompt from `.xreview/prompts/digest.md`. Follow those instructions to process each reviewer's feedback.
+Read the digest prompt: check `.xreview/prompts/digest.md` first (project-local), fall back to `~/.xreview/prompts/digest.md` (global). Follow those instructions to process each reviewer's feedback.
 
 In summary: do not blindly accept feedback. For each point, accept, reject with reasoning, or partially accept. Verify factual claims by reading actual code. Watch for hallucinated concerns, scope creep, preference-vs-problem, and over-engineering.
 
@@ -82,7 +82,7 @@ Present:
 
 If the developer asks to send the updated plan back for another round:
 
-1. Read `.xreview/prompts/round2.md` and use it instead of the standard `reviewer.md`.
+1. Read the round2 prompt: check `.xreview/prompts/round2.md` first (project-local), fall back to `~/.xreview/prompts/round2.md` (global). Use it instead of the standard `reviewer.md`.
 2. For **inline** reviewers: just proceed — the full history is already in the session.
 3. For **cross-model subprocess** reviewers (`codex`, `claude`): construct the prompt with the round2 template plus:
    - `## Previous Review` — the reviewer's prior output

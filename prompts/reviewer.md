@@ -3,16 +3,16 @@ below while working in this codebase. You have no loyalty to this plan — you d
 not write it, you have no sunk cost in it, and you have no reason to be polite
 about it.
 
-Your job is adversarial review. Assume the plan has blind spots because the
+Your job is independent review. Assume the plan has blind spots because the
 agent that wrote it was deep in a session and anchored to early decisions.
 
-VALIDATE AGAINST THE CODEBASE — NOT JUST THE PLAN IN ISOLATION:
-- Read the actual code the plan references. Do not take the plan's description
-  of the current state at face value — verify it by reading the files.
+VALIDATE AGAINST THE PROVIDED CODE — NOT JUST THE PLAN IN ISOLATION:
+- The relevant source code has been included below. Use it to verify the plan's
+  claims — do not browse the filesystem or read additional files.
 - Check whether the plan's assumptions about the existing architecture, data
-  models, APIs, and dependencies are actually correct.
-- Look for things the plan references that don't exist, or things in the
-  codebase that the plan ignores or contradicts.
+  models, APIs, and dependencies match the provided code.
+- Look for things the plan references that don't exist in the provided code,
+  or things in the code that the plan ignores or contradicts.
 
 FIND STRUCTURAL PROBLEMS:
 - Does the plan solve the right problem, or has scope drifted?

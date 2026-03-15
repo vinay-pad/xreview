@@ -1,6 +1,6 @@
 # xreview
 
-Get a fresh, adversarial review of your plan from another AI coding agent — without leaving your session.
+Get a fresh, independent review of your plan from another AI coding agent — without leaving your session.
 
 Working in Claude Code? Run `/xreview`. In Codex? Open `/skills` and choose `xreview`, or type `$xreview`. In both tools, the file is optional: if you omit it, `xreview` reviews the most recent in-session plan or spec. Or review with a **fresh instance of the same model** — no session bias, no anchoring, no sunk cost.
 
@@ -13,20 +13,26 @@ xreview makes this one command instead of copy-pasting between tools.
 ## Install
 
 ```bash
-cd your-project
 git clone https://github.com/vinay-pad/xreview.git /tmp/xreview
 bash /tmp/xreview/install.sh
 ```
 
-This installs three things into your project:
+One install, works in every project. The script installs globally:
 
 | What | Where | Purpose |
 |------|-------|---------|
-| Prompts | `.xreview/prompts/` | Reviewer, digest, and follow-up prompt templates |
-| Claude Code command | `.claude/commands/xreview.md` | `/xreview` slash command |
-| Codex skill | `.agents/skills/xreview/SKILL.md` | `/skills` -> `xreview` or `$xreview` |
+| Prompts | `~/.xreview/prompts/` | Reviewer, digest, and follow-up prompt templates |
+| Claude Code command | `~/.claude/commands/xreview.md` | `/xreview` slash command (global) |
+| Codex skill | `~/.agents/skills/xreview/SKILL.md` | `/skills` -> `xreview` or `$xreview` (global) |
 
 No pip, no npm, no dependencies. Just markdown files.
+
+To customize prompts for a specific project, copy them into that repo:
+
+```bash
+cp -r ~/.xreview/prompts .xreview/prompts
+# edit .xreview/prompts/ to taste — project-local prompts take priority
+```
 
 **Requirements:** At least two AI coding CLIs installed and authenticated.
 
@@ -66,11 +72,11 @@ If `file` is omitted, the agent should use the most recent plan or spec from the
 ## What happens
 
 1. Your agent reads the plan from the provided file or the current conversation and gathers codebase context
-2. Reads the reviewer prompt from `.xreview/prompts/reviewer.md`
+2. Reads the reviewer prompt (project-local `.xreview/prompts/reviewer.md` if it exists, otherwise global `~/.xreview/prompts/reviewer.md`)
 3. Calls the reviewer CLI in headless mode with the plan + context + prompt
-4. Reviewer does an adversarial review: validates against the codebase, finds structural problems, challenges decisions, rates the plan READY/REVISE/RETHINK
+4. Reviewer does an independent review: validates against the codebase, finds structural problems, challenges decisions, rates the plan READY/REVISE/RETHINK
 5. Response flows back into your session
-6. Your agent reads `.xreview/prompts/digest.md` and processes the feedback critically — doesn't blindly accept it
+6. Your agent reads the digest prompt and processes the feedback critically — doesn't blindly accept it
 
 ### The digest guardrails
 
@@ -84,11 +90,11 @@ And watches for: hallucinated concerns, scope creep, preferences disguised as pr
 
 ### Multi-round reviews
 
-After the first review, ask your agent to send the updated plan back. It reads `.xreview/prompts/round2.md` and tells the reviewer to verify fixes were actually made, check for new issues, and call out weak rejections.
+After the first review, ask your agent to send the updated plan back. It reads the round2 prompt and tells the reviewer to verify fixes were actually made, check for new issues, and call out weak rejections.
 
 ## Editing prompts
 
-The prompts are the product. Edit them in `.xreview/prompts/`:
+The prompts are the product. Global defaults live in `~/.xreview/prompts/`. To customize per-project, copy them to `.xreview/prompts/` in that repo — project-local always wins.
 
 | File | Controls |
 |------|----------|
@@ -101,19 +107,26 @@ Tune these to match your workflow. Make the reviewer harsher, add domain-specifi
 ## File structure
 
 ```
-# Installed in your project
-.xreview/
+# Installed globally
+~/.xreview/
   prompts/
-    reviewer.md         # Adversarial review prompt
+    reviewer.md         # Independent review prompt
     digest.md           # Feedback analysis guardrails
     round2.md           # Follow-up round prompt
-.claude/
+~/.claude/
   commands/
-    xreview.md          # /xreview slash command
-.agents/
+    xreview.md          # /xreview slash command (works in any project)
+~/.agents/
   skills/
     xreview/
-      SKILL.md          # /skills -> xreview or $xreview
+      SKILL.md          # /skills -> xreview or $xreview (works in any project)
+
+# Optional per-project override (takes priority over global)
+your-project/.xreview/
+  prompts/
+    reviewer.md         # Project-specific review criteria
+    digest.md
+    round2.md
 ```
 
 ```
