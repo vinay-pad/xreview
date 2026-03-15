@@ -1,14 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_URL="https://github.com/vinay-pad/xreview.git"
 INSTALLED=0
 
 echo ""
 echo "  xreview — cross-review your plans with other AI agents"
 echo ""
 
-# Install prompts globally into ~/.xreview/prompts/
+# If run from a clone (e.g., bash install.sh), use that directory.
+# If run via curl | bash, clone the repo to a temp dir.
+if [ -f "${BASH_SOURCE[0]:-}" ] && [ -d "$(dirname "${BASH_SOURCE[0]}")/prompts" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    SCRIPT_DIR="$(mktemp -d)"
+    echo "  Downloading xreview..."
+    git clone --depth=1 --quiet "$REPO_URL" "$SCRIPT_DIR"
+    CLEANUP_DIR="$SCRIPT_DIR"
+    echo ""
+fi
+
+cleanup() {
+    [ -n "${CLEANUP_DIR:-}" ] && rm -rf "$CLEANUP_DIR"
+}
+trap cleanup EXIT
+
+# Install prompts globally
 mkdir -p "$HOME/.xreview/prompts"
 cp "$SCRIPT_DIR/prompts/reviewer.md" "$HOME/.xreview/prompts/reviewer.md"
 cp "$SCRIPT_DIR/prompts/digest.md" "$HOME/.xreview/prompts/digest.md"

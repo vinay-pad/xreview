@@ -13,8 +13,7 @@ xreview makes this one command instead of copy-pasting between tools.
 ## Install
 
 ```bash
-git clone https://github.com/vinay-pad/xreview.git /tmp/xreview
-bash /tmp/xreview/install.sh
+curl -fsSL https://raw.githubusercontent.com/vinay-pad/xreview/main/install.sh | bash
 ```
 
 One install, works in every project. The script installs globally:
@@ -36,14 +35,13 @@ cp -r ~/.xreview/prompts .xreview/prompts
 
 ### Update
 
-Re-run the same install command — it overwrites the previous files:
+Re-run the install command — it pulls the latest and overwrites the global files:
 
 ```bash
-cd /tmp/xreview && git pull  # or re-clone if you deleted it
-bash /tmp/xreview/install.sh
+curl -fsSL https://raw.githubusercontent.com/vinay-pad/xreview/main/install.sh | bash
 ```
 
-This updates the global prompts and commands. Any project-local prompts in `.xreview/prompts/` are not touched — you manage those yourself.
+Project-local prompts in `.xreview/prompts/` are not touched.
 
 **Requirements:** At least two AI coding CLIs installed and authenticated.
 
