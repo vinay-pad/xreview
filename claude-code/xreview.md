@@ -12,7 +12,10 @@ Send a plan or file to another AI coding agent for adversarial review, then crit
 
 ## Arguments
 - `<file>` — optional. The plan, spec, or code file to review. If omitted, use the most recent plan from the current conversation.
-- `--reviewer <list>` — comma-separated: `codex`, `claude`, `self` (self = fresh instance of current model). Defaults to `self` if omitted.
+- `--reviewer <list>` — comma-separated: `codex`, `claude`, `self`, `inline`. Defaults to `self` if omitted.
+  - `self` = fresh instance of current model via subprocess (genuine independence, no sunk cost)
+  - `codex` / `claude` = cross-model review via subprocess
+  - `inline` = in-session review (fast, retains context, but less independent — use when speed matters more than adversarial rigor)
 - `--context <files>` — optional comma-separated additional context files
 - `--no-codebase` — skip auto-including codebase tree
 
@@ -34,6 +37,7 @@ If `--reviewer` is not specified in $ARGUMENTS, default to `self`.
    - Read README.md if it exists (first 200 lines).
    - Read package.json, pyproject.toml, or Cargo.toml if they exist.
 2. Read any files passed via `--context`.
+3. **Inline referenced code:** Scan the plan content for file paths (e.g., `src/foo.ts`, `lib/bar.py`, `path/to/file:123`). For each referenced file that exists, read it and include it in a `## Referenced Source Code` section with the file path as a heading and the contents in a fenced code block. This ensures the reviewer has the actual code without needing to browse the filesystem.
 
 ## Step 3: Build and send the review prompt
 
@@ -43,24 +47,25 @@ If `--reviewer` is not specified in $ARGUMENTS, default to `self`.
    - A `## Codebase Context` section with the project structure, README excerpt, and package metadata from Step 2
    - A `## Plan Under Review` section with the full plan contents from Step 1
 3. Resolve `self` to `claude` (since you are Claude).
-4. For each reviewer, pipe the prompt via stdin using your Bash tool:
+4. For each reviewer:
 
-   - **codex**: `codex exec -C "$PWD" --skip-git-repo-check - <<'XREVIEW_EOF' ... XREVIEW_EOF`
-   - **claude**: `claude -p - --print <<'XREVIEW_EOF' ... XREVIEW_EOF`
+   - **inline**: Perform the review directly in the current session. Read the reviewer prompt template, then adopt the adversarial reviewer role and produce the review yourself. This is fast and retains full conversation context, but less independent since you wrote the plan. After producing the review, continue to Step 4 as normal.
 
-   Use a heredoc to pass the full prompt:
+   - **codex**: Shell out via subprocess:
+     ```bash
+     codex exec -C "$PWD" --skip-git-repo-check - 2>/tmp/xreview-stderr.log <<'XREVIEW_EOF'
+     [full prompt here]
+     XREVIEW_EOF
+     ```
 
-   ```bash
-   codex exec -C "$PWD" --skip-git-repo-check - 2>/tmp/xreview-stderr.log <<'XREVIEW_EOF'
-   [full prompt here]
-   XREVIEW_EOF
-   ```
+   - **claude**: Shell out via subprocess:
+     ```bash
+     claude -p - --print 2>/tmp/xreview-stderr.log <<'XREVIEW_EOF'
+     [full prompt here]
+     XREVIEW_EOF
+     ```
 
-   If the command produces no stdout, check `/tmp/xreview-stderr.log` for errors and report them to the user.
-
-Call reviewers one at a time. If a CLI is not installed, report it and continue with the others.
-
-Redirect stderr to `/tmp/xreview-stderr.log` to keep output clean. If the command returns empty stdout, read the stderr log and report the error to the user.
+   If a subprocess produces no stdout, check `/tmp/xreview-stderr.log` for errors and report them to the user. If a CLI is not installed, report it and continue with the others.
 
 ## Step 4: Analyze the feedback
 
@@ -75,4 +80,14 @@ Present:
 
 ## Follow-up rounds
 
-If the developer asks to send the updated plan back for another round, read `.xreview/prompts/round2.md` and prepend it to the reviewer prompt instead of the standard reviewer.md. Then repeat Steps 2-4.
+If the developer asks to send the updated plan back for another round:
+
+1. Read `.xreview/prompts/round2.md` and use it instead of the standard `reviewer.md`.
+2. For **inline** reviewers: just proceed — the full history is already in the session.
+3. For **cross-model subprocess** reviewers (`codex`, `claude`): construct the prompt with the round2 template plus:
+   - `## Previous Review` — the reviewer's prior output
+   - `## Author Response` — your Step 4 feedback analysis (accepted/rejected/partial with reasoning)
+   - `## Updated Plan Under Review` — the revised plan
+   - The same codebase context and referenced source code from Step 2
+   This gives the fresh instance the full review history so it can track what was addressed and what wasn't.
+4. Then repeat Steps 2-4.

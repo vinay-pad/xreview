@@ -29,11 +29,11 @@ Supported arguments:
 | Argument | Meaning | Default |
 |----------|---------|---------|
 | `file` | Optional plan, spec, or code file to review | Most recent plan/spec in the current conversation |
-| `--reviewer` | Comma-separated reviewers: `claude`, `codex`, `self` | `self` |
+| `--reviewer` | Comma-separated: `claude`, `codex`, `self`, `inline` | `self` |
 | `--context` | Comma-separated extra files to include | none |
 | `--no-codebase` | Skip auto-including repo structure and metadata | off |
 
-`self` means a fresh Codex instance with no current-session bias.
+`self` = fresh instance of current model via subprocess (genuine independence, no sunk cost). `inline` = in-session review (fast but less independent).
 
 ## When to Use
 
@@ -46,7 +46,7 @@ Supported arguments:
 
 Parse the user's request for:
 - **file** — optional. The plan, spec, or code file to review. If not specified, use the most recent plan from the current conversation.
-- **reviewers** — which agents: `claude`, `codex`, `self` (self = fresh instance of current model). Defaults to `self` if not specified.
+- **reviewers** — which agents: `claude`, `codex`, `self`, `inline`. `self` = fresh subprocess of current model. Defaults to `self` if not specified.
 - **context files** — any additional files to include
 - **no-codebase** — whether to skip codebase structure
 
@@ -63,6 +63,7 @@ Parse the user's request for:
    - Read README.md if it exists (first 200 lines).
    - Read package.json, pyproject.toml, or Cargo.toml if they exist.
 2. Read any files passed via `--context`.
+3. **Inline referenced code:** Scan the plan content for file paths (e.g., `src/foo.ts`, `lib/bar.py`, `path/to/file:123`). For each referenced file that exists, read it and include it in a `## Referenced Source Code` section with the file path as a heading and the contents in a fenced code block. This ensures the reviewer has the actual code without needing to browse the filesystem.
 
 ## Step 3: Build and send the review prompt
 
@@ -72,24 +73,25 @@ Parse the user's request for:
    - A `## Codebase Context` section with structure, README, and package metadata from Step 2
    - A `## Plan Under Review` section with the full plan contents from Step 1
 3. Resolve `self` to `codex` (since you are Codex).
-4. For each reviewer, pipe the prompt via stdin using your shell tool:
+4. For each reviewer:
 
-   - **claude**: `claude -p - --print <<'XREVIEW_EOF' ... XREVIEW_EOF`
-   - **codex** (fresh instance): `codex exec -C "$PWD" --skip-git-repo-check - <<'XREVIEW_EOF' ... XREVIEW_EOF`
+   - **inline**: Perform the review directly in the current session. Read the reviewer prompt template, then adopt the adversarial reviewer role and produce the review yourself. This is fast and retains full conversation context, but less independent since you wrote the plan. After producing the review, continue to Step 4 as normal.
 
-   Use a heredoc to pass the full prompt:
+   - **claude**: Shell out via subprocess:
+     ```bash
+     claude -p - --print 2>/tmp/xreview-stderr.log <<'XREVIEW_EOF'
+     [full prompt here]
+     XREVIEW_EOF
+     ```
 
-   ```bash
-   claude -p - --print 2>/tmp/xreview-stderr.log <<'XREVIEW_EOF'
-   [full prompt here]
-   XREVIEW_EOF
-   ```
+   - **codex** (fresh instance): Shell out via subprocess:
+     ```bash
+     codex exec -C "$PWD" --skip-git-repo-check - 2>/tmp/xreview-stderr.log <<'XREVIEW_EOF'
+     [full prompt here]
+     XREVIEW_EOF
+     ```
 
-   If the command produces no stdout, check `/tmp/xreview-stderr.log` for errors and report them to the user.
-
-Call reviewers one at a time. If a CLI is not installed, report it and continue.
-
-Redirect stderr to `/tmp/xreview-stderr.log` to keep output clean. If the command returns empty stdout, read the stderr log and report the error to the user.
+   If a subprocess produces no stdout, check `/tmp/xreview-stderr.log` for errors and report them to the user. If a CLI is not installed, report it and continue.
 
 ## Step 4: Analyze the feedback
 
@@ -104,12 +106,22 @@ Present:
 
 ## Follow-up rounds
 
-If the user asks to send the updated plan back for another round, read `.xreview/prompts/round2.md` and prepend it to the reviewer prompt instead of the standard reviewer.md. Then repeat Steps 2-4.
+If the user asks to send the updated plan back for another round:
+
+1. Read `.xreview/prompts/round2.md` and use it instead of the standard `reviewer.md`.
+2. For **inline** reviewers: just proceed — the full history is already in the session.
+3. For **cross-model subprocess** reviewers (`codex`, `claude`): construct the prompt with the round2 template plus:
+   - `## Previous Review` — the reviewer's prior output
+   - `## Author Response` — your Step 4 feedback analysis (accepted/rejected/partial with reasoning)
+   - `## Updated Plan Under Review` — the revised plan
+   - The same codebase context and referenced source code from Step 2
+   This gives the fresh instance the full review history so it can track what was addressed and what wasn't.
+4. Then repeat Steps 2-4.
 
 ## Common Mistakes
 
 - Do not require a file path if the conversation already contains a clear plan or spec.
-- Do not default `self` to `claude` in Codex. In Codex, `self` resolves to `codex`.
+- `self` resolves to a fresh subprocess of the current model (`codex` in Codex, `claude` in Claude). Do not resolve `self` to `inline`.
 - Do not blindly accept reviewer feedback; always classify it and verify factual claims against the actual code or plan.
 - Do not skip the codebase context unless the user explicitly asks for `--no-codebase`.
 

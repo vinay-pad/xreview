@@ -1,5 +1,7 @@
-You previously reviewed an earlier version of this plan. The original agent has
-processed your feedback and produced an updated plan.
+You are continuing a multi-round review. Below you will find:
+- Your previous review (under `## Previous Review`)
+- The plan author's response and triage of your feedback (under `## Author Response`)
+- The updated plan (under `## Updated Plan Under Review`)
 
 Review the updated plan with the same rigor as before, but also:
 
