@@ -34,6 +34,17 @@ cp -r ~/.xreview/prompts .xreview/prompts
 # edit .xreview/prompts/ to taste — project-local prompts take priority
 ```
 
+### Update
+
+Re-run the same install command — it overwrites the previous files:
+
+```bash
+cd /tmp/xreview && git pull  # or re-clone if you deleted it
+bash /tmp/xreview/install.sh
+```
+
+This updates the global prompts and commands. Any project-local prompts in `.xreview/prompts/` are not touched — you manage those yourself.
+
 **Requirements:** At least two AI coding CLIs installed and authenticated.
 
 ## Usage
