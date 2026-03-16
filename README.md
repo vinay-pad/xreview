@@ -19,17 +19,17 @@ curl -fsSL https://raw.githubusercontent.com/vinay-pad/xreview/main/install.sh |
 One install, works in every project. The script:
 
 1. Installs prompts, commands, and skills globally
-2. Registers MCP servers so cross-model review is fast (warm instance, no cold start)
+2. Installs a small local daemon and client for the fast path
 
 | What | Where | Purpose |
 |------|-------|---------|
 | Prompts | `~/.xreview/prompts/` | Reviewer, digest, and follow-up prompt templates |
+| Daemon | `~/.xreview/bin/xreviewd` | Local warm-review broker |
+| Client | `~/.xreview/bin/xreviewctl` | Thin CLI that auto-starts the daemon |
 | Claude Code command | `~/.claude/commands/xreview.md` | `/xreview` slash command (global) |
 | Codex skill | `~/.agents/skills/xreview/SKILL.md` | `/skills` -> `xreview` or `$xreview` (global) |
-| MCP: Codex in Claude | `claude mcp add codex` | Codex stays warm inside Claude Code sessions |
-| MCP: Claude in Codex | `codex mcp add claude-code` | Claude stays warm inside Codex sessions |
 
-No pip, no npm, no dependencies. Just markdown files and MCP config.
+No pip, no npm, no dependencies. Just markdown files and a small Python daemon.
 
 To customize prompts for a specific project, copy them into that repo:
 
@@ -87,7 +87,7 @@ If `file` is omitted, the agent should use the most recent plan or spec from the
 
 1. Your agent reads the plan from the provided file or the current conversation and gathers codebase context
 2. Reads the reviewer prompt (project-local `.xreview/prompts/reviewer.md` if it exists, otherwise global `~/.xreview/prompts/reviewer.md`)
-3. Calls the reviewer via MCP (fast, warm instance) or CLI subprocess (fallback)
+3. Calls the reviewer through the local xreview daemon (fast path) or CLI subprocess (fallback)
 4. Reviewer does an independent review: validates against the codebase, finds structural problems, challenges decisions, rates the plan READY/REVISE/RETHINK
 5. Response flows back into your session
 6. Your agent reads the digest prompt and processes the feedback critically — doesn't blindly accept it
@@ -168,11 +168,18 @@ Yes — use `self` or the model name. A fresh instance reviews without session b
 **What if a reviewer CLI isn't installed?**
 The agent reports it and continues with the others.
 
-**Why not an MCP server or Python package?**
-The agent already knows how to read files, run shell commands, and process output. It just needs instructions on when to call another CLI and how to think about the feedback. That's markdown files, not infrastructure.
+**Why a daemon now?**
+Cold-starting reviewer CLIs on every review turned out to be too slow. The daemon keeps Claude and Codex transports warm while preserving the same markdown-driven prompt and digest flow.
 
-**What if the prompt-only approach breaks?**
-If you hit issues with shell escaping or inconsistent agent behavior, the next step would be extracting a small local runner script. But start simple and add that only if needed.
+**How do I test the fast path?**
+After install:
+
+```bash
+printf 'Say OK only' | ~/.xreview/bin/xreviewctl review --reviewer claude
+printf 'Say OK only' | ~/.xreview/bin/xreviewctl review --reviewer codex
+```
+
+The first call auto-starts `~/.xreview/bin/xreviewd` and writes logs to `~/.xreview/logs/xreviewd.log`.
 
 ## License
 

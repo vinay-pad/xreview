@@ -77,9 +77,14 @@ Parse the user's request for:
 
    - **inline**: Perform the review directly in the current session. Read the reviewer prompt template, then adopt the independent reviewer role and produce the review yourself. This is fast and retains full conversation context, but less independent since you wrote the plan. After producing the review, continue to Step 4 as normal.
 
-   - **claude**: Use the `claude-code` MCP tool (preferred) or fall back to subprocess.
-     - **MCP (fast):** Call the `claude-code` MCP tool with the full review prompt. This uses a warm Claude instance — no cold start.
-     - **Subprocess (fallback):** If the MCP tool is not available, shell out:
+   - **claude**: Use the local xreview daemon (preferred) or fall back to subprocess.
+     - **Daemon (fast):** Pipe the full review prompt into:
+       ```bash
+       ~/.xreview/bin/xreviewctl review --reviewer claude --cwd "$PWD" <<'XREVIEW_EOF'
+       [full prompt here]
+       XREVIEW_EOF
+       ```
+     - **Subprocess (fallback):** If the daemon/client is not available or fails, shell out:
        ```bash
        claude -p - --print 2>/tmp/xreview-stderr.log <<'XREVIEW_EOF'
        [full prompt here]
@@ -93,7 +98,7 @@ Parse the user's request for:
      XREVIEW_EOF
      ```
 
-   If a subprocess produces no stdout, check `/tmp/xreview-stderr.log` for errors and report them to the user. If a CLI or MCP tool is not available, report it and continue.
+   If the daemon/client path fails, report that briefly and use the subprocess fallback. If a subprocess produces no stdout, check `/tmp/xreview-stderr.log` for errors and report them to the user. If a CLI or daemon/client is not available, report it and continue.
 
 ## Step 4: Analyze the feedback
 

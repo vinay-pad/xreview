@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+import pathlib
+import sys
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+LIB = ROOT / "lib"
+SRC = ROOT
+
+for candidate in (LIB, SRC):
+    if candidate.exists():
+        sys.path.insert(0, str(candidate))
+
+from xreviewd.daemon import main
+
+
+if __name__ == "__main__":
+    main()
