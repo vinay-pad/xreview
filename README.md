@@ -16,15 +16,20 @@ xreview makes this one command instead of copy-pasting between tools.
 curl -fsSL https://raw.githubusercontent.com/vinay-pad/xreview/main/install.sh | bash
 ```
 
-One install, works in every project. The script installs globally:
+One install, works in every project. The script:
+
+1. Installs prompts, commands, and skills globally
+2. Registers MCP servers so cross-model review is fast (warm instance, no cold start)
 
 | What | Where | Purpose |
 |------|-------|---------|
 | Prompts | `~/.xreview/prompts/` | Reviewer, digest, and follow-up prompt templates |
 | Claude Code command | `~/.claude/commands/xreview.md` | `/xreview` slash command (global) |
 | Codex skill | `~/.agents/skills/xreview/SKILL.md` | `/skills` -> `xreview` or `$xreview` (global) |
+| MCP: Codex in Claude | `claude mcp add codex` | Codex stays warm inside Claude Code sessions |
+| MCP: Claude in Codex | `codex mcp add claude-code` | Claude stays warm inside Codex sessions |
 
-No pip, no npm, no dependencies. Just markdown files.
+No pip, no npm, no dependencies. Just markdown files and MCP config.
 
 To customize prompts for a specific project, copy them into that repo:
 
@@ -82,7 +87,7 @@ If `file` is omitted, the agent should use the most recent plan or spec from the
 
 1. Your agent reads the plan from the provided file or the current conversation and gathers codebase context
 2. Reads the reviewer prompt (project-local `.xreview/prompts/reviewer.md` if it exists, otherwise global `~/.xreview/prompts/reviewer.md`)
-3. Calls the reviewer CLI in headless mode with the plan + context + prompt
+3. Calls the reviewer via MCP (fast, warm instance) or CLI subprocess (fallback)
 4. Reviewer does an independent review: validates against the codebase, finds structural problems, challenges decisions, rates the plan READY/REVISE/RETHINK
 5. Response flows back into your session
 6. Your agent reads the digest prompt and processes the feedback critically — doesn't blindly accept it

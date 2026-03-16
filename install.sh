@@ -3,6 +3,7 @@ set -euo pipefail
 
 REPO_URL="https://github.com/vinay-pad/xreview.git"
 INSTALLED=0
+MCP_CONFIGURED=0
 
 echo ""
 echo "  xreview — cross-review your plans with other AI agents"
@@ -34,13 +35,20 @@ echo "  ✓ Prompts  →  ~/.xreview/prompts/"
 
 echo ""
 
-# Claude Code: global slash command
+# Claude Code: global slash command + MCP server for Codex
 if command -v claude &> /dev/null; then
     mkdir -p "$HOME/.claude/commands"
     cp "$SCRIPT_DIR/claude-code/xreview.md" "$HOME/.claude/commands/xreview.md"
     echo "  ✓ Claude Code  →  /xreview (global)"
-    echo "    Installed ~/.claude/commands/xreview.md"
     INSTALLED=$((INSTALLED + 1))
+
+    # Register Codex as an MCP server in Claude Code (if codex is installed)
+    if command -v codex &> /dev/null; then
+        claude mcp add -s user --transport stdio codex -- codex mcp-server 2>/dev/null && {
+            echo "  ✓ MCP  →  Codex registered as MCP server in Claude Code"
+            MCP_CONFIGURED=$((MCP_CONFIGURED + 1))
+        } || echo "  ⚠  Could not register Codex MCP server (run manually: claude mcp add -s user --transport stdio codex -- codex mcp-server)"
+    fi
 else
     echo "  ✗ Claude Code — not found"
     echo "    Install: npm i -g @anthropic-ai/claude-code"
@@ -48,22 +56,25 @@ fi
 
 echo ""
 
-# Codex: global skill
+# Codex: global skill + MCP server for Claude
 if command -v codex &> /dev/null; then
     mkdir -p "$HOME/.agents/skills/xreview"
     cp "$SCRIPT_DIR/codex/xreview/SKILL.md" "$HOME/.agents/skills/xreview/SKILL.md"
     echo "  ✓ Codex  →  /skills -> xreview or \$xreview (global)"
-    echo "    Installed ~/.agents/skills/xreview/SKILL.md"
     INSTALLED=$((INSTALLED + 1))
 
-    CODEX_CONFIG="$HOME/.codex/config.toml"
-    if [ -f "$CODEX_CONFIG" ]; then
-        if ! grep -q 'skills\s*=\s*true' "$CODEX_CONFIG" 2>/dev/null; then
-            echo ""
-            echo "    ⚠  Codex skills may need enabling. Add to ~/.codex/config.toml:"
-            echo "      [features]"
-            echo "      skills = true"
-        fi
+    # Register Claude as an MCP server in Codex (if claude is installed)
+    if command -v claude &> /dev/null; then
+        codex mcp add claude-code -- claude mcp serve 2>/dev/null && {
+            echo "  ✓ MCP  →  Claude registered as MCP server in Codex"
+            MCP_CONFIGURED=$((MCP_CONFIGURED + 1))
+        } || {
+            echo "  ⚠  Could not register Claude MCP server automatically."
+            echo "    Add to ~/.codex/config.toml:"
+            echo "      [mcp_servers.claude-code]"
+            echo "      command = \"claude\""
+            echo "      args = [\"mcp\", \"serve\"]"
+        }
     fi
 else
     echo "  ✗ Codex — not found"
@@ -76,6 +87,9 @@ echo ""
 
 if [ $INSTALLED -gt 0 ]; then
     echo "  $INSTALLED integration(s) installed globally."
+    if [ $MCP_CONFIGURED -gt 0 ]; then
+        echo "  $MCP_CONFIGURED MCP server(s) configured for fast cross-model review."
+    fi
     echo ""
     echo "  /xreview now works in any project."
     echo ""
