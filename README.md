@@ -2,7 +2,7 @@
 
 Get a fresh, independent review of your plan from another AI coding agent — without leaving your session.
 
-Working in Claude Code? Run `/xreview`. In Codex? Open `/skills` and choose `xreview`, or type `$xreview`. In both tools, the file is optional: if you omit it, `xreview` reviews the most recent in-session plan or spec. Or review with a **fresh instance of the same model** — no session bias, no anchoring, no sunk cost.
+Working in Claude Code? Run `/xreview`. In Codex? Type `$xreview`. The file is optional — if you omit it, xreview reviews the most recent in-session plan.
 
 ## Why
 
@@ -12,150 +12,88 @@ xreview makes this one command instead of copy-pasting between tools.
 
 ## Install
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/vinay-pad/xreview/main/install.sh | bash
-```
-
-One install, works in every project. The script:
-
-1. Installs prompts, commands, and skills globally
-2. Installs a small local daemon and client for the fast path
-
-| What | Where | Purpose |
-|------|-------|---------|
-| Prompts | `~/.xreview/prompts/` | Reviewer, digest, and follow-up prompt templates |
-| Daemon | `~/.xreview/bin/xreviewd` | Local warm-review broker |
-| Client | `~/.xreview/bin/xreviewctl` | Thin CLI that auto-starts the daemon |
-| Claude Code command | `~/.claude/commands/xreview.md` | `/xreview` slash command (global) |
-| Codex skill | `~/.agents/skills/xreview/SKILL.md` | `/skills` -> `xreview` or `$xreview` (global) |
-
-No pip, no npm, no dependencies. Just markdown files and a small Python daemon.
-
-To customize prompts for a specific project, copy them into that repo:
-
-```bash
-cp -r ~/.xreview/prompts .xreview/prompts
-# edit .xreview/prompts/ to taste — project-local prompts take priority
-```
-
-### Update
-
-Re-run the install command — it pulls the latest and overwrites the global files:
+**Prerequisites:** At least one of [Claude Code](https://claude.ai/download) or [Codex](https://github.com/openai/codex) installed and authenticated.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vinay-pad/xreview/main/install.sh | bash
 ```
 
-Project-local prompts in `.xreview/prompts/` are not touched.
+That's it. No pip, no npm, no dependencies. Restart your CLI session to load the new commands.
 
-**Requirements:** At least two AI coding CLIs installed and authenticated.
+To update, re-run the same command.
 
 ## Usage
 
-### From Claude Code
+### Claude Code
 
 ```
-/xreview
-/xreview plan.md --reviewer codex
-/xreview plan.md --reviewer codex,self
-/xreview plan.md --reviewer self --context prd.md,architecture.md
+/xreview                                    # review latest in-session plan with a fresh Claude instance
+/xreview plan.md --reviewer codex           # send plan.md to Codex for review
+/xreview --reviewer codex,self              # get reviews from both Codex and a fresh Claude
+/xreview plan.md --context prd.md           # include extra files as context
+/xreview --no-codebase                      # skip sending project structure
 ```
 
-### From Codex
+### Codex
 
 ```
-/skills
-$xreview
-$xreview plan.md --reviewer claude
-$xreview plan.md --reviewer codex,self
-$xreview plan.md --reviewer self --context prd.md,architecture.md
+$xreview                                    # review latest in-session plan with a fresh Codex instance
+$xreview plan.md --reviewer claude          # send plan.md to Claude for review
+$xreview --reviewer claude,self             # get reviews from both Claude and a fresh Codex
+$xreview plan.md --context prd.md           # include extra files as context
 ```
 
-The argument surface is intentionally the same in both tools:
+### Arguments
 
-```
-xreview [file] --reviewer <reviewers> --context <extra-files> --no-codebase
-```
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `<file>` | Plan, spec, or code file to review | Most recent plan in session |
+| `--reviewer` | `codex`, `claude`, `self`, `inline` (comma-separated) | `self` |
+| `--context` | Extra files to include | none |
+| `--no-codebase` | Skip project structure in prompt | off |
 
-If `file` is omitted, the agent should use the most recent plan or spec from the current conversation.
+**`self`** = a fresh instance of the model you're currently using, with zero session context. Often catches more than a different model because it has the same capabilities but none of your accumulated assumptions.
 
-### What `self` means
+**`inline`** = in-session review (fast, but less independent since the same agent wrote the plan).
 
-`self` = a fresh instance of the model you're currently using. It reviews your plan cold, with zero session context. Often catches more than a different model because it has the same capabilities but none of your accumulated assumptions.
+## How it works
 
-## What happens
-
-1. Your agent reads the plan from the provided file or the current conversation and gathers codebase context
-2. Reads the reviewer prompt (project-local `.xreview/prompts/reviewer.md` if it exists, otherwise global `~/.xreview/prompts/reviewer.md`)
-3. Calls the reviewer through the local xreview daemon (fast path) or CLI subprocess (fallback)
-4. Reviewer does an independent review: validates against the codebase, finds structural problems, challenges decisions, rates the plan READY/REVISE/RETHINK
-5. Response flows back into your session
-6. Your agent reads the digest prompt and processes the feedback critically — doesn't blindly accept it
-
-### The digest guardrails
-
-Your agent classifies each piece of feedback:
-
-- **Accept** — genuine issue, will change the plan
-- **Reject** — wrong or doesn't apply, with specific reasoning
-- **Partially accept** — real concern but different fix needed
-
-And watches for: hallucinated concerns, scope creep, preferences disguised as problems, suggestions that duplicate existing code.
+1. Your agent extracts the plan (from file or conversation)
+2. `xreview-build-prompt` assembles the review prompt (reviewer instructions + project structure + plan) in <1s
+3. The prompt is piped to the reviewer CLI (`codex exec` or `claude -p`), which has full filesystem access to verify claims
+4. The reviewer produces an independent review (READY / REVISE / RETHINK)
+5. Your agent critically digests the feedback — accepts, rejects with reasoning, or partially accepts each point
 
 ### Multi-round reviews
 
-After the first review, ask your agent to send the updated plan back. It reads the round2 prompt and tells the reviewer to verify fixes were actually made, check for new issues, and call out weak rejections.
+Ask your agent to send the updated plan back for another round. The reviewer gets the full history (previous review + your responses) so it can verify fixes were actually made.
 
-## Editing prompts
+## Customizing prompts
 
-The prompts are the product. Global defaults live in `~/.xreview/prompts/`. To customize per-project, copy them to `.xreview/prompts/` in that repo — project-local always wins.
+Global defaults live in `~/.xreview/prompts/`. To customize per-project:
+
+```bash
+cp -r ~/.xreview/prompts .xreview/prompts
+# edit to taste — project-local prompts take priority
+```
 
 | File | Controls |
 |------|----------|
-| `reviewer.md` | What the external reviewer focuses on and how it formats feedback |
+| `reviewer.md` | What the reviewer focuses on and how it formats feedback |
 | `digest.md` | How your agent processes feedback — guardrails against blind acceptance |
 | `round2.md` | Follow-up round instructions — verify fixes, find new issues |
 
-Tune these to match your workflow. Make the reviewer harsher, add domain-specific review criteria, adjust the digest rules.
-
-## File structure
+## What gets installed
 
 ```
-# Installed globally
 ~/.xreview/
-  prompts/
-    reviewer.md         # Independent review prompt
-    digest.md           # Feedback analysis guardrails
-    round2.md           # Follow-up round prompt
-~/.claude/
-  commands/
-    xreview.md          # /xreview slash command (works in any project)
-~/.agents/
-  skills/
-    xreview/
-      SKILL.md          # /skills -> xreview or $xreview (works in any project)
-
-# Optional per-project override (takes priority over global)
-your-project/.xreview/
-  prompts/
-    reviewer.md         # Project-specific review criteria
-    digest.md
-    round2.md
+  prompts/                          # reviewer, digest, round2 prompt templates
+  bin/xreview-build-prompt          # assembles review prompt (<1s)
+~/.claude/commands/xreview.md       # /xreview slash command (if Claude Code found)
+~/.agents/skills/xreview/SKILL.md   # $xreview skill (if Codex found)
 ```
 
-```
-# Source repo
-xreview/
-├── install.sh
-├── claude-code/xreview.md
-├── codex/xreview/SKILL.md
-├── prompts/
-│   ├── reviewer.md
-│   ├── digest.md
-│   └── round2.md
-├── README.md
-└── LICENSE
-```
+Project-local overrides go in `your-project/.xreview/prompts/`.
 
 ## FAQ
 
@@ -163,23 +101,14 @@ xreview/
 Each review is an API call via the reviewer's CLI. Same cost as using that CLI directly.
 
 **Can I review with the same model?**
-Yes — use `self` or the model name. A fresh instance reviews without session bias. This is often the most useful mode.
+Yes — `self` spawns a fresh instance with zero session context.
 
 **What if a reviewer CLI isn't installed?**
 The agent reports it and continues with the others.
 
-**Why a daemon now?**
-Cold-starting reviewer CLIs on every review turned out to be too slow. The daemon keeps Claude and Codex transports warm while preserving the same markdown-driven prompt and digest flow.
+## Architecture Decisions
 
-**How do I test the fast path?**
-After install:
-
-```bash
-printf 'Say OK only' | ~/.xreview/bin/xreviewctl review --reviewer claude
-printf 'Say OK only' | ~/.xreview/bin/xreviewctl review --reviewer codex
-```
-
-The first call auto-starts `~/.xreview/bin/xreviewd` and writes logs to `~/.xreview/logs/xreviewd.log`.
+See [docs/architecture-decisions.md](docs/architecture-decisions.md).
 
 ## License
 

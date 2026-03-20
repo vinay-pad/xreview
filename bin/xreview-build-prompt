@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# Assembles the review prompt from template + plan, writes it to a temp file,
+# and prints the path.
+#
+# The prompt is kept lean: reviewer instructions + project structure overview + plan.
+# The reviewer model has filesystem access via -C/--cwd and should read files itself.
+#
+# Usage:
+#   xreview-build-prompt --plan <file> --cwd <dir> [--template <name>] [--context <files>] [--no-codebase]
+#
+# Reads plan from file or stdin if --plan is "-".
+# Output: path to temp file containing the assembled prompt.
+
+set -euo pipefail
+
+PLAN_FILE=""
+CWD="."
+CONTEXT_FILES=""
+NO_CODEBASE=false
+TEMPLATE="reviewer.md"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --plan)     PLAN_FILE="$2"; shift 2 ;;
+        --cwd)      CWD="$2"; shift 2 ;;
+        --context)  CONTEXT_FILES="$2"; shift 2 ;;
+        --template) TEMPLATE="$2"; shift 2 ;;
+        --no-codebase) NO_CODEBASE=true; shift ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+if [ -z "$PLAN_FILE" ]; then
+    echo "Usage: xreview-build-prompt --plan <file|-> --cwd <dir> [--template <name>] [--context <files>] [--no-codebase]" >&2
+    exit 1
+fi
+
+# Resolve prompt template: project-local > global
+if [ -f "$CWD/.xreview/prompts/$TEMPLATE" ]; then
+    REVIEWER_PROMPT="$CWD/.xreview/prompts/$TEMPLATE"
+elif [ -f "$HOME/.xreview/prompts/$TEMPLATE" ]; then
+    REVIEWER_PROMPT="$HOME/.xreview/prompts/$TEMPLATE"
+else
+    echo "Error: $TEMPLATE not found in $CWD/.xreview/prompts/ or ~/.xreview/prompts/" >&2
+    exit 1
+fi
+
+# Read plan
+if [ "$PLAN_FILE" = "-" ]; then
+    PLAN_CONTENT="$(cat)"
+else
+    if [ ! -f "$PLAN_FILE" ]; then
+        echo "Error: plan file not found: $PLAN_FILE" >&2
+        exit 1
+    fi
+    PLAN_CONTENT="$(cat "$PLAN_FILE")"
+fi
+
+# Build prompt into temp file
+OUTFILE="$(mktemp /tmp/xreview-prompt.XXXXXX)"
+
+# Section 1: Reviewer instructions
+cat "$REVIEWER_PROMPT" >> "$OUTFILE"
+
+# Section 2: Lightweight codebase orientation (just structure, not file contents)
+if [ "$NO_CODEBASE" = false ]; then
+    printf '\n\n## Codebase Context\n\n' >> "$OUTFILE"
+
+    printf '### Project Structure\n```text\n' >> "$OUTFILE"
+    (cd "$CWD" && find . -type f \
+        -not -path '*/.git/*' \
+        -not -path '*/node_modules/*' \
+        -not -path '*/__pycache__/*' \
+        -not -path '*/venv/*' \
+        -not -path '*/.venv/*' \
+        -not -path '*/dist/*' \
+        -not -path '*/build/*' \
+        -not -path '*/.next/*' \
+        2>/dev/null | head -200 || true) >> "$OUTFILE"
+    printf '```\n\n' >> "$OUTFILE"
+
+    printf 'You have full filesystem access. Read any files you need to verify the plan.\n\n' >> "$OUTFILE"
+fi
+
+# Section 2b: Extra context files (explicit --context only)
+if [ -n "$CONTEXT_FILES" ]; then
+    printf '## Additional Context\n\n' >> "$OUTFILE"
+    IFS=',' read -ra CTX_ARRAY <<< "$CONTEXT_FILES"
+    for ctx in "${CTX_ARRAY[@]}"; do
+        ctx="$(echo "$ctx" | xargs)"  # trim whitespace
+        if [ -f "$CWD/$ctx" ]; then
+            printf '### %s\n\n```\n' "$ctx" >> "$OUTFILE"
+            cat "$CWD/$ctx" >> "$OUTFILE"
+            printf '\n```\n\n' >> "$OUTFILE"
+        elif [ -f "$ctx" ]; then
+            printf '### %s\n\n```\n' "$ctx" >> "$OUTFILE"
+            cat "$ctx" >> "$OUTFILE"
+            printf '\n```\n\n' >> "$OUTFILE"
+        fi
+    done
+fi
+
+# Section 3: The plan itself
+printf '\n\n## Plan Under Review\n\n' >> "$OUTFILE"
+echo "$PLAN_CONTENT" >> "$OUTFILE"
+
+echo "$OUTFILE"

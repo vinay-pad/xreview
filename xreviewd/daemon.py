@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from xreviewd.claude_backend import ClaudeWarmBackend
@@ -15,8 +16,13 @@ def handle_review_request(backends, payload):
         raise ValueError(f"Unknown reviewer: {reviewer}")
     if not prompt or not prompt.strip():
         raise ValueError("prompt is required")
+    started_at = time.monotonic()
     response = backends[reviewer].review(prompt, cwd)
-    return {"reviewer": reviewer, "response": response}
+    return {
+        "reviewer": reviewer,
+        "response": response,
+        "timing": {"backend_seconds": round(time.monotonic() - started_at, 6)},
+    }
 
 
 class XReviewHTTPServer(ThreadingHTTPServer):
@@ -76,4 +82,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

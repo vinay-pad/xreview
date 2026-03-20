@@ -24,57 +24,76 @@ If `--reviewer` is not specified in $ARGUMENTS, default to `self`.
 
 ---
 
-## Step 1: Get the plan
+## Timing
 
-**If a file is specified:** Read it in full.
+You MUST track wall-clock time at each step boundary so the user can see where time goes. At the start of each step, run:
+```bash
+python3 -c 'import time; print(f"{time.time():.3f}")'
+```
+Record the output as `t0` (start of step 1), `t1` (start of step 2), `t2` (end of step 2 / start of step 3), and `t3` (end of step 3). In the final output, compute and report:
+- **Step 1 (plan + prompt assembly):** `t1 - t0` seconds
+- **Step 2 (reviewer call):** `t2 - t1` seconds
+- **Step 3 (digest):** `t3 - t2` seconds
+- **Total:** `t3 - t0` seconds
 
-**If no file is specified:** Look back through the current conversation and identify the most recent plan, spec, proposal, or technical design you produced. Extract it completely — including all sections, implementation details, and decisions. Hold it in memory as the plan content. If you cannot identify a clear plan in the conversation, ask the developer which part of the conversation to use.
+This is mandatory. Do not skip timing even if the review succeeds.
 
-## Step 2: Gather context
+## Step 1: Get the plan and build the review prompt
 
-1. Unless `--no-codebase` is passed:
-   - Run `find . -type f -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/__pycache__/*' -not -path '*/venv/*' -not -path '*/.venv/*' -not -path '*/dist/*' -not -path '*/build/*' -not -path '*/.next/*' | head -200` for project structure.
-   - Read README.md if it exists (first 200 lines).
-   - Read package.json, pyproject.toml, or Cargo.toml if they exist.
-2. Read any files passed via `--context`.
-3. **Inline referenced code:** Scan the plan content for file paths (e.g., `src/foo.ts`, `lib/bar.py`, `path/to/file:123`). For each referenced file that exists, read it and include it in a `## Referenced Source Code` section with the file path as a heading and the contents in a fenced code block. This ensures the reviewer has the actual code without needing to browse the filesystem.
+Run `python3 -c 'import time; print(f"{time.time():.3f}")'` and record the result as `t0`.
 
-## Step 3: Build and send the review prompt
+**If a file is specified:** Use that file path as the plan.
 
-1. Read the reviewer prompt template: check `.xreview/prompts/reviewer.md` first (project-local), fall back to `~/.xreview/prompts/reviewer.md` (global).
-2. Construct the full prompt in memory by combining:
-   - The reviewer prompt template
-   - A `## Codebase Context` section with the project structure, README excerpt, and package metadata from Step 2
-   - A `## Plan Under Review` section with the full plan contents from Step 1
-3. Resolve `self` to `claude` (since you are Claude).
-4. For each reviewer:
+**If no file is specified:** Look back through the current conversation and identify the most recent plan, spec, proposal, or technical design you produced. Write it to a unique temp file:
+```bash
+PLAN_FILE=$(mktemp /tmp/xreview-plan.XXXXXX.md)
+cat > "$PLAN_FILE" <<'PLAN_EOF'
+[paste the full plan content here]
+PLAN_EOF
+```
 
-   - **inline**: Perform the review directly in the current session. Read the reviewer prompt template, then adopt the independent reviewer role and produce the review yourself. This is fast and retains full conversation context, but less independent since you wrote the plan. After producing the review, continue to Step 4 as normal.
+Then build the review prompt using the helper script and capture the returned path:
+```bash
+PROMPT_FILE=$(~/.xreview/bin/xreview-build-prompt \
+  --plan <file-or-$PLAN_FILE> \
+  --cwd "$PWD" \
+  [--context <extra-files>] \
+  [--no-codebase])
+```
 
-   - **codex**: Use the local xreview daemon (preferred) or fall back to subprocess.
-     - **Daemon (fast):** Pipe the full review prompt into:
-       ```bash
-       ~/.xreview/bin/xreviewctl review --reviewer codex --cwd "$PWD" <<'XREVIEW_EOF'
-       [full prompt here]
-       XREVIEW_EOF
-       ```
-     - **Subprocess (fallback):** If the daemon/client is not available or fails, shell out:
-       ```bash
-       codex exec -C "$PWD" --skip-git-repo-check - 2>/tmp/xreview-stderr.log <<'XREVIEW_EOF'
-       [full prompt here]
-       XREVIEW_EOF
-       ```
+This prints the path to a temp file containing the assembled prompt (reviewer instructions + project structure + plan). It runs in <1s. You MUST capture the output into `PROMPT_FILE` and use that variable in all subsequent commands.
 
-   - **claude**: Shell out via subprocess:
-     ```bash
-     claude -p - --print 2>/tmp/xreview-stderr.log <<'XREVIEW_EOF'
-     [full prompt here]
-     XREVIEW_EOF
-     ```
+Resolve `self` to `claude` (since you are Claude).
 
-   If the daemon/client path fails, report that briefly and use the subprocess fallback. If a subprocess produces no stdout, check `/tmp/xreview-stderr.log` for errors and report them to the user. If a CLI or daemon/client is not available, report it and continue with the others.
+## Step 2: Send for review
 
-## Step 4: Analyze the feedback
+Run `python3 -c 'import time; print(f"{time.time():.3f}")'` and record the result as `t1`.
+
+For each reviewer, use `$PROMPT_FILE` (the path captured from `xreview-build-prompt`):
+
+- **inline**: Read the reviewer prompt template (`.xreview/prompts/reviewer.md` or `~/.xreview/prompts/reviewer.md`), then adopt the independent reviewer role and produce the review yourself. This is fast and retains full conversation context, but less independent since you wrote the plan. Skip to Step 3.
+
+- **codex**: Call the CLI directly:
+  ```bash
+  codex exec -C "$PWD" --skip-git-repo-check - 2>/tmp/xreview-stderr.log < "$PROMPT_FILE"
+  ```
+
+- **claude**: Call the CLI directly:
+  ```bash
+  claude -p - --print 2>/tmp/xreview-stderr.log < "$PROMPT_FILE"
+  ```
+
+If a subprocess produces no stdout, check `/tmp/xreview-stderr.log` for errors and report them to the user. If a CLI is not available, report it and continue with the others.
+
+Clean up temp files after use (only delete files YOU created, never the user's original plan file):
+```bash
+rm -f "$PROMPT_FILE"
+```
+If you created a temp plan file with `mktemp` in Step 1, also delete that: `rm -f "$PLAN_FILE"`. Do NOT delete a user-supplied file path.
+
+## Step 3: Analyze the feedback
+
+Run `python3 -c 'import time; print(f"{time.time():.3f}")'` and record the result as `t2`.
 
 Read the digest prompt: check `.xreview/prompts/digest.md` first (project-local), fall back to `~/.xreview/prompts/digest.md` (global). Follow those instructions to process each reviewer's feedback.
 
@@ -84,17 +103,18 @@ Present:
 1. **Feedback analysis** — each point classified with reasoning
 2. **Updated plan** — incorporating accepted feedback, marking what changed
 3. **Open questions** — anything needing developer input
+4. **Timing** — Run `python3 -c 'import time; print(f"{time.time():.3f}")'` and record the result as `t3`. Compute and report the full timing breakdown as described in the Timing section above. Always include this.
 
 ## Follow-up rounds
 
 If the developer asks to send the updated plan back for another round:
 
-1. Read the round2 prompt: check `.xreview/prompts/round2.md` first (project-local), fall back to `~/.xreview/prompts/round2.md` (global). Use it instead of the standard `reviewer.md`.
-2. For **inline** reviewers: just proceed — the full history is already in the session.
-3. For **cross-model subprocess** reviewers (`codex`, `claude`): construct the prompt with the round2 template plus:
-   - `## Previous Review` — the reviewer's prior output
-   - `## Author Response` — your Step 4 feedback analysis (accepted/rejected/partial with reasoning)
-   - `## Updated Plan Under Review` — the revised plan
-   - The same codebase context and referenced source code from Step 2
+1. For **inline** reviewers: just proceed — the full history is already in the session.
+2. For **cross-model subprocess** reviewers (`codex`, `claude`):
+   - Write the updated plan to a temp file
+   - Run `~/.xreview/bin/xreview-build-prompt --plan <updated-plan> --cwd "$PWD" --template round2.md` to get the base prompt with the round2 template
+   - Append to that prompt file:
+     - `## Previous Review` — the reviewer's prior output
+     - `## Author Response` — your Step 3 feedback analysis (accepted/rejected/partial with reasoning)
    This gives the fresh instance the full review history so it can track what was addressed and what wasn't.
-4. Then repeat Steps 2-4.
+3. Then repeat Steps 2-3.

@@ -7,6 +7,11 @@ import time
 from typing import Iterable, List
 
 
+def format_worker_error(lines: Iterable[str], fallback: str) -> str:
+    text = "\n".join(line.strip() for line in lines if line and line.strip()).strip()
+    return text or fallback
+
+
 def extract_assistant_text(lines: Iterable[str]) -> str:
     chunks: List[str] = []
     for line in lines:
@@ -66,23 +71,33 @@ class ClaudeWorker:
         self.process.stdin.flush()
 
         lines: List[str] = []
-        done = False
+        errors: List[str] = []
+        saw_assistant = False
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
             ready, _, _ = select.select([self.process.stdout, self.process.stderr], [], [], 0.25)
+            if not ready:
+                if saw_assistant:
+                    return extract_assistant_text(lines)
+                if self.process.poll() is not None:
+                    break
+                continue
             for stream in ready:
                 line = stream.readline()
                 if not line:
                     continue
                 if stream is self.process.stderr:
+                    errors.append(line.strip())
                     continue
                 lines.append(line.strip())
                 if '"type":"assistant"' in line or '"type": "assistant"' in line:
-                    done = True
-            if done:
-                return extract_assistant_text(lines)
+                    saw_assistant = True
             if self.process.poll() is not None:
                 break
+        if saw_assistant:
+            return extract_assistant_text(lines)
+        if errors:
+            raise RuntimeError(format_worker_error(errors, "Claude worker failed"))
         raise TimeoutError("Timed out waiting for Claude worker output")
 
     def close(self) -> None:

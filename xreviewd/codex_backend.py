@@ -8,6 +8,11 @@ from itertools import count
 from typing import Dict, Iterable, List
 
 
+def format_app_server_error(lines: Iterable[str], fallback: str) -> str:
+    text = "\n".join(line.strip() for line in lines if line and line.strip()).strip()
+    return text or fallback
+
+
 def collect_turn_output(messages: Iterable[dict], turn_id: str) -> str:
     parts: List[str] = []
     for message in messages:
@@ -45,16 +50,26 @@ class CodexAppServerBackend:
     def _read_message(self, timeout: float = 180.0) -> dict:
         if self._process is None or self._process.stdout is None or self._process.stderr is None:
             raise RuntimeError("Codex app-server is not running")
+        errors: List[str] = []
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
             ready, _, _ = select.select([self._process.stdout, self._process.stderr], [], [], 0.25)
+            if not ready:
+                if self._process.poll() is not None:
+                    break
+                continue
             for stream in ready:
                 line = stream.readline()
                 if not line:
                     continue
                 if stream is self._process.stderr:
+                    errors.append(line.strip())
                     continue
                 return json.loads(line)
+            if self._process.poll() is not None:
+                break
+        if errors:
+            raise RuntimeError(format_app_server_error(errors, "Codex app-server failed"))
         raise TimeoutError("Timed out waiting for Codex app-server output")
 
     def _send_request(self, method: str, params: dict) -> int:

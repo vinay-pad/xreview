@@ -31,8 +31,9 @@ def daemon_health() -> bool:
 
 
 def start_daemon() -> None:
+    started_at = time.monotonic()
     if daemon_health():
-        return
+        return time.monotonic() - started_at
     root = repo_root()
     script = root / "bin" / "xreviewd"
     logs = root / "logs"
@@ -49,14 +50,30 @@ def start_daemon() -> None:
     deadline = time.time() + 10
     while time.time() < deadline:
         if daemon_health():
-            return
+            return time.monotonic() - started_at
         time.sleep(0.25)
     raise RuntimeError("xreviewd failed to start")
 
 
+def format_timing_summary(timing: dict) -> str:
+    parts = []
+    for label, key in (
+        ("daemon_start", "daemon_start_seconds"),
+        ("request", "request_seconds"),
+        ("backend", "backend_seconds"),
+        ("total", "total_seconds"),
+    ):
+        value = timing.get(key)
+        if value is not None:
+            parts.append(f"{label}={value:.3f}s")
+    return "timing: " + " ".join(parts)
+
+
 def review(args) -> int:
-    start_daemon()
+    total_started_at = time.monotonic()
+    daemon_start_seconds = start_daemon()
     prompt = sys.stdin.read()
+    request_started_at = time.monotonic()
     request = urllib.request.Request(
         daemon_url("/v1/review"),
         data=json.dumps({"reviewer": args.reviewer, "cwd": args.cwd, "prompt": prompt}).encode("utf-8"),
@@ -65,7 +82,17 @@ def review(args) -> int:
     )
     with urllib.request.urlopen(request, timeout=args.timeout) as response:
         payload = json.loads(response.read())
+    request_seconds = time.monotonic() - request_started_at
     print(payload["response"])
+    if args.timing:
+        timing = {
+            "daemon_start_seconds": daemon_start_seconds,
+            "request_seconds": request_seconds,
+            "total_seconds": time.monotonic() - total_started_at,
+        }
+        if isinstance(payload.get("timing"), dict):
+            timing.update(payload["timing"])
+        print(format_timing_summary(timing), file=sys.stderr)
     return 0
 
 
@@ -77,6 +104,7 @@ def main() -> int:
     review_parser.add_argument("--reviewer", required=True, choices=["claude", "codex"])
     review_parser.add_argument("--cwd", default=os.getcwd())
     review_parser.add_argument("--timeout", type=int, default=240)
+    review_parser.add_argument("--timing", action="store_true")
     review_parser.set_defaults(func=review)
 
     args = parser.parse_args()
